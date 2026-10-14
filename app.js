@@ -13,8 +13,6 @@ $('#resetData').onclick=()=>location.reload();
 $('#csvUpload').onchange=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=()=>useUploadedCsv(reader.result,file.name);reader.readAsText(file);};
 $('#citySearch').onclick=searchCity;
 $('#useSeoul').onclick=()=>{$('#cityInput').value='서울';fetchOutdoor(37.5665,126.978,'서울');};
-$('#experimentForm').onsubmit=saveExperiment;
-$('#clearExperiments').onclick=()=>{localStorage.removeItem('ict-air-experiments');renderExperiments();};
 
 function statusFor(key,value){
   if(value==null)return["결측","bad"];
@@ -32,7 +30,7 @@ function render(){
   $('#kpiGrid').innerHTML=keys.map(k=>{const [st,cls]=statusFor(k,l[k]);return `<article class="kpi"><div class="kpi-top"><span class="kpi-label">${LABELS[k]}</span><span class="chip ${cls}">${st}</span></div><strong>${fmt(l[k],k.includes('temp')?1:0)} <small>${UNITS[k]}</small></strong><small>${k==='co2_ppm'?'고정값 여부 함께 확인':k==='pm25_ugm3'?'1분 평균과 함께 판단':'마지막 측정값'}</small></article>`}).join('');
   $('#observedHours').textContent=`${fmt(s.observed_hours,2)}시간`;$('#comfortPct').textContent=`${fmt(s.comfort_pct,1)}%`;$('#sessionCount').textContent=`${s.sessions}개`;$('#maxGap').textContent=`최대 중단 ${fmt(s.max_gap_hours,2)}시간`;
   $('#pmMax').textContent=`${fmt(s.pm25_max)} µg/m³`;$('#co2Max').textContent=`${fmt(s.co2_max)} ppm`;$('#pmOver').textContent=`${fmt(s.pm25_over_35_pct,2)}%`;
-  renderPrediction();renderEvents();renderCharts();renderAppliedInsights();renderDecision();renderExperiments();
+  renderPrediction();renderEvents();renderCharts();renderDecision();
 }
 
 function renderPrediction(){
@@ -104,40 +102,6 @@ function renderDecision(){
   $('#decisionTitle').textContent=title;$('#decisionReason').textContent=reason;$('#decisionBadge').textContent=badge;$('#decisionDetail').textContent=OUTDOOR?`${OUTDOOR.name} 외부환경 반영`:'실내 데이터 기준';
   $('#compareActionTitle').textContent=title;$('#compareActionText').textContent=reason;
 }
-function renderAppliedInsights(){
-  if(!DATA)return;const s=DATA.summary,l=s.latest,events=DATA.events.filter(e=>e.type.startsWith('PM'));const exposure=events.reduce((a,e)=>a+e.duration_min,0);
-  const a=17.27,b=237.7,g=(a*l.dht_temp_C)/(b+l.dht_temp_C)+Math.log(l.dht_humi_pct/100),dew=(b*g)/(a-g);
-  $('#insightComfort').textContent=`${fmt(s.comfort_pct,1)}%`;$('#exposureMinutes').textContent=`${fmt(exposure,1)}분`;$('#dewPoint').textContent=`${fmt(dew,1)}℃`;$('#condensationText').textContent=l.dht_temp_C-dew<3?'결로 위험 높음':'결로 위험 낮음';$('#cleanRows').textContent=fmt(s.analysis_rows);$('#excludedRows').textContent=`${fmt(s.excluded_rows)}행 제외`;
-  const rows=DATA.minute.slice(-60);const forecast=(key)=>{const vals=rows.map(r=>+r[key]).filter(Number.isFinite);if(vals.length<10)return null;const n=vals.length,meanX=(n-1)/2,meanY=vals.reduce((x,y)=>x+y,0)/n;let num=0,den=0;vals.forEach((v,i)=>{num+=(i-meanX)*(v-meanY);den+=(i-meanX)**2});const slope=num/den;return{value:vals.at(-1)+slope*10,slope};};
-  const tf=forecast('dht_temp'),hf=forecast('dht_humi');$('#tempForecast').textContent=tf?`${fmt(tf.value,1)}℃`:'—';$('#humiForecast').textContent=hf?`${fmt(hf.value,1)}%`:'—';$('#tempTrend').textContent=tf?`분당 ${tf.slope>=0?'+':''}${tf.slope.toFixed(3)}℃`:'데이터 부족';$('#humiTrend').textContent=hf?`분당 ${hf.slope>=0?'+':''}${hf.slope.toFixed(3)}%p`:'데이터 부족';
-}
-const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-function readExperiments(){try{return JSON.parse(localStorage.getItem('ict-air-experiments')||'[]')}catch{return[]}}
-function saveExperiment(e){
-  e.preventDefault();const list=readExperiments(),l=DATA?.summary?.latest||{};
-  list.unshift({id:Date.now(),time:new Date().toISOString(),dataTime:DATA?.summary?.latest_timestamp||null,label:$('#experimentLabel').value.trim(),people:$('#peopleCount').value,window:$('#windowState').value,fan:$('#fanState').value,note:$('#experimentNote').value.trim(),baseline:{temp:l.dht_temp_C,humi:l.dht_humi_pct,co2:l.co2_ppm,pm25:l.pm25_ugm3}});
-  localStorage.setItem('ict-air-experiments',JSON.stringify(list.slice(0,50)));e.target.reset();renderExperiments();
-}
-function deleteExperiment(id){localStorage.setItem('ict-air-experiments',JSON.stringify(readExperiments().filter(x=>x.id!==id)));renderExperiments();}
-function expectedExperimentEffect(x){
-  if(x.window==='열림'||x.fan==='켜짐')return '환기 후 CO₂·PM2.5 감소 여부를 확인합니다.';
-  if(+x.people>0)return '인원 체류 후 CO₂·온습도 상승 여부를 확인합니다.';
-  return '기록 전후 센서값의 변화를 비교합니다.';
-}
-function experimentResult(x){
-  if(!x.baseline||!x.dataTime)return{state:'unavailable',title:'결과 계산 불가',text:'이 기록은 기준 센서값 저장 기능이 추가되기 전에 만들어졌습니다.'};
-  const start=new Date(x.dataTime).getTime(),target=start+10*60000;
-  const after=DATA.minute.find(r=>new Date(r.timestamp).getTime()>=target);
-  if(!after)return{state:'waiting',title:'측정 결과 대기',text:`센서 기준시각 ${dt(x.dataTime)} 이후 10분 이상의 새 CSV 데이터가 필요합니다.`};
-  const changes=[['온도',after.dht_temp-x.baseline.temp,'℃',1],['습도',after.dht_humi-x.baseline.humi,'%p',1],['CO₂',after.co2-x.baseline.co2,' ppm',0],['PM2.5',after.pm25-x.baseline.pm25,' µg/m³',1]];
-  return{state:'done',title:'10분 후 실제 변화',text:changes.map(([n,v,u,d])=>`${n} ${v>=0?'+':''}${fmt(v,d)}${u}`).join(' · ')};
-}
-function renderExperiments(){
-  const el=$('#experimentList');if(!el)return;const list=readExperiments();
-  el.innerHTML=list.length?list.map(x=>{const result=experimentResult(x),base=x.baseline?`기준값: ${fmt(x.baseline.temp,1)}℃ · ${fmt(x.baseline.humi,1)}% · CO₂ ${fmt(x.baseline.co2)} ppm · PM2.5 ${fmt(x.baseline.pm25,1)}`:'기준값 없음';return `<div class="experiment-entry"><time>기록 ${dt(x.time)}</time><div class="experiment-content"><strong>${esc(x.label)}</strong><p>인원 ${esc(x.people||'미기록')}명 · 창문 ${esc(x.window)} · 환기장치 ${esc(x.fan)}${x.note?' · '+esc(x.note):''}</p><div class="experiment-baseline">${base}</div><div class="experiment-expected"><b>예상 효과</b><span>${expectedExperimentEffect(x)}</span></div><div class="experiment-result ${result.state}"><b>${result.title}</b><span>${result.text}</span></div></div><button data-delete-experiment="${x.id}">삭제</button></div>`}).join(''):'<div class="empty">아직 저장된 실험 기록이 없습니다.</div>';
-  el.querySelectorAll('[data-delete-experiment]').forEach(b=>b.onclick=()=>deleteExperiment(+b.dataset.deleteExperiment));
-}
-
 function parseCsv(text){const lines=text.trim().split(/\r?\n/),heads=lines.shift().split(',');return lines.map(line=>{const vals=line.split(',');return Object.fromEntries(heads.map((h,i)=>[h.trim(),vals[i]?.trim()]))});}
 function useUploadedCsv(text,name){
   const rows=parseCsv(text);if(!rows.length||!('timestamp'in rows[0])){alert('지원하는 air_log.csv 형식이 아닙니다.');return;}

@@ -15,7 +15,6 @@
       <nav aria-label="대시보드 메뉴">
         <button class="nav-item active" data-view="overview">개요</button>
         <button class="nav-item" data-view="compare">실내외 비교</button>
-        <button class="nav-item" data-view="insights">활용 분석</button>
         <button class="nav-item" data-view="trends">추세 분석</button>
         <button class="nav-item" data-view="events">이벤트</button>
       </nav>
@@ -76,33 +75,6 @@
           <article class="compare-card"><span>바람</span><div class="single"><strong id="outdoorWind">-</strong><i>외부 풍속</i></div><div id="locationName" class="difference">서울</div></article>
         </div>
         <article class="panel compare-action"><div class="action-icon">↗</div><div><h3 id="compareActionTitle">환기 조건 분석 중</h3><p id="compareActionText">외부 데이터가 준비되면 실내외 차이를 바탕으로 행동을 제안합니다.</p></div></article>
-      </section>
-
-      <section id="insights" class="view">
-        <div class="section-heading"><div><p class="eyebrow">APPLIED ANALYTICS</p><h2>데이터 활용 분석</h2></div></div>
-        <div class="grid four">
-          <article class="panel compact"><span class="metric-label">쾌적구간 체류율</span><strong id="insightComfort">-</strong><small>20~26℃ · 40~60%</small></article>
-          <article class="panel compact"><span class="metric-label">PM2.5 주의 노출</span><strong id="exposureMinutes">-</strong><small>35 µg/m³ 초과 지속시간</small></article>
-          <article class="panel compact"><span class="metric-label">현재 이슬점</span><strong id="dewPoint">-</strong><small id="condensationText">결로 위험 분석</small></article>
-          <article class="panel compact"><span class="metric-label">정제 데이터</span><strong id="cleanRows">-</strong><small id="excludedRows">-</small></article>
-        </div>
-        <div class="grid two-wide equal">
-          <article class="panel forecast-panel">
-            <div class="panel-head"><div><h3>10분 후 환경 추세</h3><p>최근 60분 선형 변화율 기반 참고값</p></div><span class="badge">실험 기능</span></div>
-            <div class="forecast-row"><div><span>온도</span><strong id="tempForecast">-</strong><small id="tempTrend">-</small></div><div><span>습도</span><strong id="humiForecast">-</strong><small id="humiTrend">-</small></div><div><span>CO₂</span><strong>예측 중지</strong><small>고정값 비율이 높음</small></div></div>
-            <p class="method-note">예측값은 최근 방향을 연장한 단순 기준선입니다. 실험 조건과 정상 CO₂ 데이터가 쌓이면 모델 비교 기능으로 확장할 수 있습니다.</p>
-          </article>
-          <article class="panel experiment-panel">
-            <div class="panel-head"><div><h3>실험 이벤트 기록</h3><p>조건과 현재 센서 기준값을 저장하고 이후 데이터를 비교합니다.</p></div></div>
-            <form id="experimentForm">
-              <div class="form-row"><input id="experimentLabel" placeholder="예: 창문 개방" required><input id="peopleCount" type="number" min="0" placeholder="인원수"></div>
-              <div class="form-row"><select id="windowState"><option value="미기록">창문 상태</option><option>열림</option><option>닫힘</option></select><select id="fanState"><option value="미기록">환기장치</option><option>켜짐</option><option>꺼짐</option></select></div>
-              <textarea id="experimentNote" placeholder="실험 조건이나 특이사항"></textarea>
-              <button type="submit">실험 시작점 기록</button>
-            </form>
-          </article>
-        </div>
-        <article class="panel experiment-log"><div class="panel-head"><div><h3>실험 결과 추적</h3><p>예상 효과를 보여주고, 10분 이상 새로운 센서 데이터가 들어오면 실제 변화량을 계산합니다.</p></div><button id="clearExperiments" class="ghost">기록 비우기</button></div><div id="experimentList"></div></article>
       </section>
 
       <section id="trends" class="view">
