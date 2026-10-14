@@ -1,0 +1,12 @@
+.notice.clean {
+  background: #eaf6f3;
+  border: 1px solid #a9d8cf;
+  color: #145d58;
+}
+
+.notice.info {
+  background: #edf5fb;
+  border: 1px solid #b9d6ea;
+  color: #235a7b;
+  margin-bottom: 14px;
+}

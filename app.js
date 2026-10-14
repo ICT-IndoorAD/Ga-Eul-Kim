@@ -28,7 +28,7 @@ function render(){
   $('#kpiGrid').innerHTML=keys.map(k=>{const [st,cls]=statusFor(k,l[k]);return `<article class="kpi"><div class="kpi-top"><span class="kpi-label">${LABELS[k]}</span><span class="chip ${cls}">${st}</span></div><strong>${fmt(l[k],k.includes('temp')?1:0)} <small>${UNITS[k]}</small></strong><small>${k==='co2_ppm'?'고정값 여부 함께 확인':k==='pm25_ugm3'?'1분 평균과 함께 판단':'마지막 측정값'}</small></article>`}).join('');
   $('#observedHours').textContent=`${fmt(s.observed_hours,2)}시간`;$('#comfortPct').textContent=`${fmt(s.comfort_pct,1)}%`;$('#sessionCount').textContent=`${s.sessions}개`;$('#maxGap').textContent=`최대 중단 ${fmt(s.max_gap_hours,2)}시간`;
   $('#pmMax').textContent=`${fmt(s.pm25_max)} µg/m³`;$('#co2Max').textContent=`${fmt(s.co2_max)} ppm`;$('#pmOver').textContent=`${fmt(s.pm25_over_35_pct,2)}%`;
-  renderPrediction();renderQuality();renderEvents();renderCharts();
+  renderPrediction();renderEvents();renderCharts();
 }
 
 function renderPrediction(){
@@ -51,7 +51,7 @@ function renderEvents(){
   $('#eventList').innerHTML=DATA.events.length?DATA.events.map(e=>`<article class="event-item ${e.type.startsWith('PM')?'pm':''}"><span class="event-bar"></span><div><h3>${e.type}</h3><p>${dt(e.start)} ~ ${dt(e.end)}</p></div><div class="event-value"><strong>${fmt(e.duration_min,2)}분</strong><small>${e.type.startsWith('PM')?'최대 '+fmt(e.peak_pm25)+' µg/m³':'최대 '+fmt(e.peak_co2)+' ppm'}</small></div></article>`).join(''):'<div class="empty">감지된 이벤트가 없습니다.</div>';
 }
 
-function rangedRows(){const rows=DATA.minute;if(activeRange==='all'||!rows.length)return rows;const hrs=activeRange==='24h'?24:6,end=new Date(rows.at(-1).timestamp).getTime();return rows.filter(r=>new Date(r.timestamp).getTime()>=end-hrs*3600000);}
+function rangedRows(){const rows=DATA.minute;if(activeRange==='all'||!rows.length)return rows;const count=(activeRange==='24h'?24:6)*60;return rows.slice(-count);}
 function renderCharts(){if(!DATA)return;const rows=rangedRows();lineChart('#co2Chart',rows,[{key:'co2',color:'#ef8d32',label:'CO₂'}],[800,1000,1500],'ppm');lineChart('#pmChart',rows,[{key:'pm25',color:'#3978b9',label:'1분 평균'},{key:'pm25_max',color:'#c94f4f',label:'1분 최대'}],[15,35],'µg/m³');lineChart('#climateChart',rows,[{key:'dht_temp',color:'#ef8d32',label:'온도'},{key:'dht_humi',color:'#167d78',label:'습도'}],[], '℃ / %');}
 function lineChart(sel,rows,series,thresholds,unit){
   const el=$(sel),W=900,H=290,p={l:48,r:16,t:18,b:35};if(!rows.length){el.innerHTML='<div class="empty">표시할 데이터가 없습니다.</div>';return;}
@@ -59,7 +59,7 @@ function lineChart(sel,rows,series,thresholds,unit){
   let svg=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">`;
   for(let i=0;i<5;i++){const v=lo+(hi-lo)*i/4,yy=y(v);svg+=`<line x1="${p.l}" y1="${yy}" x2="${W-p.r}" y2="${yy}" stroke="#e5edef"/><text x="${p.l-8}" y="${yy+4}" text-anchor="end" fill="#71848b" font-size="10">${fmt(v,v<10?1:0)}</text>`}
   thresholds.forEach((v,i)=>svg+=`<line x1="${p.l}" y1="${y(v)}" x2="${W-p.r}" y2="${y(v)}" stroke="${i?'#c94f4f':'#d6a62c'}" stroke-dasharray="6 5" opacity=".75"/>`);
-  series.forEach(s=>{let d='',started=false;rows.forEach((r,i)=>{const v=+r[s.key];if(!Number.isFinite(v)){started=false;return}d+=`${started?'L':'M'}${x(i).toFixed(1)},${y(v).toFixed(1)} `;started=true});svg+=`<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" vector-effect="non-scaling-stroke"/>`});
+  series.forEach(s=>{let d='',started=false,prevTime=null;rows.forEach((r,i)=>{const v=+r[s.key],time=new Date(r.timestamp).getTime();if(!Number.isFinite(v)){started=false;prevTime=null;return}if(prevTime!==null&&time-prevTime>5*60000)started=false;d+=`${started?'L':'M'}${x(i).toFixed(1)},${y(v).toFixed(1)} `;started=true;prevTime=time});svg+=`<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" vector-effect="non-scaling-stroke"/>`});
   const stamps=[0,Math.floor((rows.length-1)/2),rows.length-1];stamps.forEach(i=>svg+=`<text x="${x(i)}" y="${H-10}" text-anchor="middle" fill="#71848b" font-size="10">${dt(rows[i].timestamp)}</text>`);svg+=`<text x="8" y="14" fill="#71848b" font-size="10">${unit}</text></svg>`;el.innerHTML=svg;
 }
 
