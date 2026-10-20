@@ -1,6 +1,6 @@
 const LABELS={dht_temp_C:"DHT 온도",dht_humi_pct:"DHT 습도",am_temp_C:"AM 온도",am_humi_pct:"AM 습도",co2_ppm:"CO₂",voc_level:"VOC",pm25_ugm3:"PM2.5"};
 const UNITS={dht_temp_C:"℃",dht_humi_pct:"%",am_temp_C:"℃",am_humi_pct:"%",co2_ppm:"ppm",voc_level:"단계",pm25_ugm3:"µg/m³"};
-let DATA=null, activeRange="all", OUTDOOR=null;
+let DATA=null, activeRange="all", forecastHorizon=10, OUTDOOR=null;
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const fmt=(n,d=0)=>n==null||Number.isNaN(+n)?"—":Number(n).toLocaleString("ko-KR",{maximumFractionDigits:d});
 const dt=v=>new Date(v).toLocaleString("ko-KR",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
@@ -9,6 +9,7 @@ fetch("data/dashboard_data.json").then(r=>r.json()).then(d=>{DATA=d;render();fet
 
 $$('.nav-item').forEach(b=>b.onclick=()=>{$$('.nav-item,.view').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#'+b.dataset.view).classList.add('active');});
 $$('.range-btn').forEach(b=>b.onclick=()=>{$$('.range-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');activeRange=b.dataset.range;renderCharts();});
+$$('.horizon-btn').forEach(b=>b.onclick=()=>{$$('.horizon-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');forecastHorizon=+b.dataset.horizon;renderForecastLab();});
 $('#resetData').onclick=()=>location.reload();
 $('#csvUpload').onchange=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=()=>useUploadedCsv(reader.result,file.name);reader.readAsText(file);};
 $('#citySearch').onclick=searchCity;
@@ -30,7 +31,7 @@ function render(){
   $('#kpiGrid').innerHTML=keys.map(k=>{const [st,cls]=statusFor(k,l[k]);return `<article class="kpi"><div class="kpi-top"><span class="kpi-label">${LABELS[k]}</span><span class="chip ${cls}">${st}</span></div><strong>${fmt(l[k],k.includes('temp')?1:0)} <small>${UNITS[k]}</small></strong><small>${k==='co2_ppm'?'고정값 여부 함께 확인':k==='pm25_ugm3'?'1분 평균과 함께 판단':'마지막 측정값'}</small></article>`}).join('');
   $('#observedHours').textContent=`${fmt(s.observed_hours,2)}시간`;$('#comfortPct').textContent=`${fmt(s.comfort_pct,1)}%`;$('#sessionCount').textContent=`${s.sessions}개`;$('#maxGap').textContent=`최대 중단 ${fmt(s.max_gap_hours,2)}시간`;
   $('#pmMax').textContent=`${fmt(s.pm25_max)} µg/m³`;$('#co2Max').textContent=`${fmt(s.co2_max)} ppm`;$('#pmOver').textContent=`${fmt(s.pm25_over_35_pct,2)}%`;
-  renderPrediction();renderEvents();renderCharts();renderDecision();
+  renderPrediction();renderEvents();renderCharts();renderDecision();renderForecastLab();
 }
 
 function renderPrediction(){
@@ -63,6 +64,49 @@ function lineChart(sel,rows,series,thresholds,unit){
   thresholds.forEach((v,i)=>svg+=`<line x1="${p.l}" y1="${y(v)}" x2="${W-p.r}" y2="${y(v)}" stroke="${i?'#c94f4f':'#d6a62c'}" stroke-dasharray="6 5" opacity=".75"/>`);
   series.forEach(s=>{let d='',started=false,prevTime=null;rows.forEach((r,i)=>{const v=+r[s.key],time=new Date(r.timestamp).getTime();if(!Number.isFinite(v)){started=false;prevTime=null;return}if(prevTime!==null&&time-prevTime>5*60000)started=false;d+=`${started?'L':'M'}${x(i).toFixed(1)},${y(v).toFixed(1)} `;started=true;prevTime=time});svg+=`<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" vector-effect="non-scaling-stroke"/>`});
   const stamps=[0,Math.floor((rows.length-1)/2),rows.length-1];stamps.forEach(i=>svg+=`<text x="${x(i)}" y="${H-10}" text-anchor="middle" fill="#71848b" font-size="10">${dt(rows[i].timestamp)}</text>`);svg+=`<text x="8" y="14" fill="#71848b" font-size="10">${unit}</text></svg>`;el.innerHTML=svg;
+}
+
+function latestContinuousRows(){
+  if(!DATA?.minute?.length)return[];const rows=DATA.minute,last=[];
+  for(let i=rows.length-1;i>=0;i--){if(last.length&&new Date(last[0].timestamp)-new Date(rows[i].timestamp)>5*60000)break;last.unshift(rows[i]);}
+  return last;
+}
+function slopeOf(values){
+  const n=values.length,meanX=(n-1)/2,meanY=values.reduce((a,b)=>a+b,0)/n;let num=0,den=0;
+  values.forEach((v,i)=>{num+=(i-meanX)*(v-meanY);den+=(i-meanX)**2});return den?num/den:0;
+}
+function forecastMetric(rows,key,horizon){
+  const values=rows.map(r=>+r[key]);const window=30,start=Math.max(window,values.length-600-horizon);let persistenceError=0,trendError=0,count=0;
+  for(let i=start;i<values.length-horizon;i++){
+    const train=values.slice(Math.max(0,i-window),i);if(train.length<10||train.some(v=>!Number.isFinite(v))||!Number.isFinite(values[i+horizon]))continue;
+    const actual=values[i+horizon],last=train.at(-1),trend=last+slopeOf(train)*horizon;
+    persistenceError+=Math.abs(actual-last);trendError+=Math.abs(actual-trend);count++;
+  }
+  const persistenceMae=count?persistenceError/count:null,trendMae=count?trendError/count:null,useTrend=trendMae!=null&&trendMae<persistenceMae;
+  const recent=values.slice(-window).filter(Number.isFinite),current=recent.at(-1),predicted=useTrend?current+slopeOf(recent)*horizon:current,mae=useTrend?trendMae:persistenceMae;
+  const spread=Math.max(...recent)-Math.min(...recent),quality=mae==null?'낮음':count>=100&&mae<=Math.max(spread*.25,.1)?'높음':count>=30?'보통':'낮음';
+  return{current,predicted,mae,count,model:useTrend?'선형 추세':'현재값 유지',quality,lower:mae==null?predicted:predicted-mae,upper:mae==null?predicted:predicted+mae};
+}
+function renderForecastLab(){
+  if(!DATA||!$('#forecastCards'))return;const rows=latestContinuousRows(),configs=[
+    {key:'dht_temp',name:'온도',unit:'℃',digits:1,color:'#ef8d32',min:-30,max:60},
+    {key:'dht_humi',name:'습도',unit:'%',digits:1,color:'#167d78',min:0,max:100},
+    {key:'pm25',name:'PM2.5',unit:' µg/m³',digits:1,color:'#3978b9',min:0,max:500}
+  ];
+  const results=configs.map(c=>{const r=forecastMetric(rows,c.key,forecastHorizon);r.predicted=Math.min(c.max,Math.max(c.min,r.predicted));r.lower=Math.min(c.max,Math.max(c.min,r.lower));r.upper=Math.min(c.max,Math.max(c.min,r.upper));if(c.key==='pm25'&&r.quality==='높음')r.quality='보통';return{...c,...r,errorDigits:2};});
+  $('#forecastHorizonLabel').textContent=`${forecastHorizon}분 후`;
+  $('#forecastCards').innerHTML=results.map(r=>`<article class="forecast-card" style="--metric-color:${r.color}"><div class="forecast-card-top"><span>${r.name}</span><span class="confidence ${r.quality==='높음'?'high':r.quality==='낮음'?'low':''}">신뢰도 ${r.quality}</span></div><div class="forecast-value"><strong>${fmt(r.predicted,r.digits)}${r.unit}</strong><small>현재 ${fmt(r.current,r.digits)}${r.unit}</small></div><div class="forecast-band"><span>예상 오차 범위</span><b>${fmt(r.lower,r.errorDigits)} ~ ${fmt(r.upper,r.errorDigits)}${r.unit}</b></div><p>${r.model} 모델 · 과거 평균 오차 ${fmt(r.mae,r.errorDigits)}${r.unit}</p></article>`).join('');
+  $('#forecastValidation').innerHTML=results.map(r=>`<tr><td><i style="background:${r.color}"></i>${r.name}</td><td>${r.model}</td><td>${fmt(r.mae,r.errorDigits)}${r.unit}</td><td>${fmt(r.count)}회</td></tr>`).join('');
+  forecastLineChart(rows.slice(-60),results);
+}
+function forecastLineChart(rows,results){
+  const el=$('#forecastChart');if(!el||!rows.length)return;const W=900,H=290,p={l:48,r:55,t:20,b:35},futureIndex=rows.length-1+forecastHorizon;
+  const normalized=(r,key)=>{const vals=rows.map(x=>+x[key]).filter(Number.isFinite),lo=Math.min(...vals),hi=Math.max(...vals);return vals.map(v=>hi===lo?50:(v-lo)/(hi-lo)*100)};
+  let svg=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">`;
+  for(let i=0;i<=4;i++){const y=p.t+i*(H-p.t-p.b)/4;svg+=`<line x1="${p.l}" y1="${y}" x2="${W-p.r}" y2="${y}" stroke="#e5edef"/><text x="${p.l-8}" y="${y+4}" text-anchor="end" fill="#71848b" font-size="10">${100-i*25}%</text>`}
+  const x=i=>p.l+i/futureIndex*(W-p.l-p.r),y=v=>p.t+(100-v)/100*(H-p.t-p.b);
+  results.forEach(r=>{const vals=normalized(rows,r.key),lastNorm=vals.at(-1),recent=rows.map(x=>+x[r.key]).filter(Number.isFinite),lo=Math.min(...recent),hi=Math.max(...recent),predNorm=hi===lo?50:(r.predicted-lo)/(hi-lo)*100;let d='';vals.forEach((v,i)=>d+=`${i?'L':'M'}${x(i).toFixed(1)},${y(v).toFixed(1)} `);svg+=`<path d="${d}" fill="none" stroke="${r.color}" stroke-width="2" vector-effect="non-scaling-stroke"/><line x1="${x(rows.length-1)}" y1="${y(lastNorm)}" x2="${x(futureIndex)}" y2="${y(Math.max(0,Math.min(100,predNorm)))}" stroke="${r.color}" stroke-width="2" stroke-dasharray="6 5" vector-effect="non-scaling-stroke"/>`});
+  svg+=`<text x="${p.l}" y="${H-10}" fill="#71848b" font-size="10">최근 60분</text><text x="${W-p.r}" y="${H-10}" text-anchor="end" fill="#71848b" font-size="10">${forecastHorizon}분 후</text></svg>`;el.innerHTML=svg;
 }
 
 async function searchCity(){

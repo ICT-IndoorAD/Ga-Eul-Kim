@@ -15,6 +15,7 @@
       <nav aria-label="대시보드 메뉴">
         <button class="nav-item active" data-view="overview">개요</button>
         <button class="nav-item" data-view="compare">실내외 비교</button>
+        <button class="nav-item" data-view="forecast">예측 실험</button>
         <button class="nav-item" data-view="trends">추세 분석</button>
         <button class="nav-item" data-view="events">이벤트</button>
       </nav>
@@ -75,6 +76,44 @@
           <article class="compare-card"><span>바람</span><div class="single"><strong id="outdoorWind">-</strong><i>외부 풍속</i></div><div id="locationName" class="difference">서울</div></article>
         </div>
         <article class="panel compare-action"><div class="action-icon">↗</div><div><h3 id="compareActionTitle">환기 조건 분석 중</h3><p id="compareActionText">외부 데이터가 준비되면 실내외 차이를 바탕으로 행동을 제안합니다.</p></div></article>
+      </section>
+
+      <section id="forecast" class="view">
+        <div class="section-heading">
+          <div><p class="eyebrow">FORECAST LAB</p><h2>단기 환경 예측 실험</h2></div>
+          <div class="segmented forecast-horizon" aria-label="예측 시간 선택">
+            <button class="horizon-btn" data-horizon="5">5분 후</button>
+            <button class="horizon-btn active" data-horizon="10">10분 후</button>
+            <button class="horizon-btn" data-horizon="30">30분 후</button>
+          </div>
+        </div>
+
+        <div class="forecast-intro">
+          <div><span>선택 시간</span><strong id="forecastHorizonLabel">10분 후</strong></div>
+          <p>최근 연속 측정 구간을 이용해 두 가지 기준 모델을 과거 데이터로 검증하고, 오차가 더 작은 방법을 자동 선택합니다.</p>
+        </div>
+
+        <div id="forecastCards" class="forecast-grid"></div>
+
+        <div class="grid two-wide forecast-details">
+          <article class="panel forecast-chart-panel">
+            <div class="panel-head"><div><h3>최근 흐름과 예측 위치</h3><p>항목별 최근 범위를 0~100으로 정규화했습니다. 실선은 실측값, 점선은 예측값입니다.</p></div></div>
+            <div id="forecastChart" class="chart" role="img" aria-label="단기 환경 예측 그래프"></div>
+          </article>
+          <article class="panel validation-panel">
+            <div class="panel-head"><div><h3>과거 구간 검증</h3><p>같은 데이터의 과거 시점에서 예측한 뒤 실제값과 비교한 결과입니다.</p></div></div>
+            <div class="validation-table-wrap">
+              <table class="validation-table"><thead><tr><th>항목</th><th>선택 모델</th><th>평균 오차</th><th>검증 수</th></tr></thead><tbody id="forecastValidation"></tbody></table>
+            </div>
+            <div class="co2-limit"><span>CO₂</span><strong>예측 제외</strong><p>전체 124,251행 중 124,214행이 813ppm으로 고정되어 변화 학습이 불가능합니다.</p></div>
+          </article>
+        </div>
+
+        <article class="panel forecast-method">
+          <div><span class="method-number">01</span><strong>연속 구간 선택</strong><p>5분 이상 끊긴 구간을 분리하고 가장 최근 구간만 사용합니다.</p></div>
+          <div><span class="method-number">02</span><strong>모델 자동 비교</strong><p>현재값 유지와 최근 30분 선형 추세 중 백테스트 오차가 작은 방식을 선택합니다.</p></div>
+          <div><span class="method-number">03</span><strong>불확실성 공개</strong><p>예측값뿐 아니라 평균 절대오차와 데이터 기반 신뢰도를 함께 표시합니다.</p></div>
+        </article>
       </section>
 
       <section id="trends" class="view">
